@@ -1,6 +1,6 @@
 // Guarda a app em cache para funcionar sem internet.
 // Ao mudar a app, sobe a versão para os telemóveis apanharem a nova.
-const CACHE = 'rotina-v12';
+const CACHE = 'rotina-v13';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

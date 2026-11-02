@@ -167,7 +167,14 @@ main.wrap{padding-block:6px calc(100px + env(safe-area-inset-bottom,0px));displa
 .irates i{height:6px;background:var(--sunk);border-radius:99px;overflow:hidden}
 .irates b{display:block;height:100%;background:var(--done);border-radius:inherit}
 .irates em{font:700 12px var(--mono);font-style:normal;text-align:right;font-variant-numeric:tabular-nums}
-.editor.items li{grid-template-columns:minmax(0,1fr) 42px}
+.editor.items li{grid-template-columns:minmax(0,1fr) auto 42px}
+.optbtn{height:46px;padding:0 10px;border-radius:10px;border:1px solid var(--line);font:600 12px var(--mono);color:var(--muted)}
+.optbtn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.otag{font:500 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-left:6px;white-space:nowrap}
+.subck.opt,.habit.done .subck.opt{background:transparent;border:1px dashed var(--line)}
+.subck.opt.on{border-style:solid}
+.subck .otag{display:block;margin:1px 0 0}
+.subck>span:last-child{min-width:0}
 .editor.tpl{gap:0}
 .editor.tpl li{padding-block:10px;row-gap:8px}
 .editor.tpl li + li{border-top:1px solid var(--line)}
@@ -336,7 +343,7 @@ const NEW_V2=()=>[{id:'h-gin',name:'Ginásio',type:'check',group:'ex'},{id:'h-co
 const NEW_V3=()=>[{id:'h-doces',name:'Dia sem doces',type:'check'},{id:'h-llm',name:'Avançar no LLM Course',type:'check'}];
 const NEW_V4=()=>[{id:'h-oculos',name:'Óculos bloqueadores de luz azul',type:'check'}];
 const myTemplate=()=>([['10:00','Pequeno-almoço'],['13:00','Almoço'],['16:00','Lanche'],['17:00','Ginásio'],['19:00','Jantar',[1,3,5]],['20:00','Jantar',[0,2,4,6]],['21:30','Treino de Futsal',[1,3]],['21:30','Jogo de Futsal',[5]]].map(([time,title,days])=>days?{id:uid(),time,title,days}:{id:uid(),time,title})).sort((a,b)=>a.time.localeCompare(b.time));
-const suppItems=()=>SUPPS.map((n,i)=>({id:'s'+i,name:n}));
+const suppItems=()=>SUPPS.map((n,i)=>({id:'s'+i,name:n,...(n==='Colagénio'?{optional:true}:{})}));
 function defaults(){
   const t=todayKey();
   return {v:1,seenIntro:false,
@@ -347,7 +354,7 @@ function defaults(){
       ...NEW_V2().map(x=>({...x,created:t})),
       ...NEW_V3().map(x=>({...x,created:t})),
       ...NEW_V4().map(x=>({...x,created:t}))
-    ],addedV2:true,addedV3:true,addedV4:true,groupV5:true,groups:{ex:{name:'Exercício'}},
+    ],addedV2:true,addedV3:true,addedV4:true,groupV5:true,optV6:true,groups:{ex:{name:'Exercício'}},
     log:{},weight:{},showWeight:true,template:myTemplate(),days:{},tplV3:true,tplV4:true};
 }
 function valid(s){return s&&typeof s==='object'&&Array.isArray(s.habits)&&Array.isArray(s.template)&&s.log&&typeof s.log==='object'&&s.days&&typeof s.days==='object';}
@@ -381,6 +388,7 @@ function load(){
     if(f){if(f.name==='Treino de Futsal')f.name='Treino/Jogo de Futsal';if(Array.isArray(f.days)&&f.days.join()==='1,3')f.days=[1,3,5];}
     s.groupV5=true;
   }
+  if(!s.optV6){const sp=s.habits.find(h=>h.id==='h-sup');if(sp&&Array.isArray(sp.items)){const c=sp.items.find(i=>i.name==='Colagénio');if(c)c.optional=true;}s.optV6=true;}
   return s;
 }
 let S=load(), storageOk=true;
@@ -404,10 +412,11 @@ function itemsDone(d,h){
 }
 function isDone(d,h){
   if(h._group)return h.members.some(m=>m.created<=d&&isDone(d,m));
-  if(hasItems(h))return itemsDone(d,h).size===h.items.length;
+  if(hasItems(h)){const req=reqItems(h),got=itemsDone(d,h);return req.length?req.every(i=>got.has(i.id)):got.size>0;}
   const v=val(d,h);return h.type==='check'?!!v:(Number(v)||0)>=h.target;
 }
-const isPartial=(d,h)=>hasItems(h)&&!isDone(d,h)&&itemsDone(d,h).size>0;
+const reqItems=h=>h.items.filter(i=>!i.optional);
+const isPartial=(d,h)=>{if(!hasItems(h)||isDone(d,h))return false;const got=itemsDone(d,h);return reqItems(h).some(i=>got.has(i.id));};
 function setVal(d,h,v){
   S.log[d]=S.log[d]||{};
   if(!v){delete S.log[d][h.id];if(!Object.keys(S.log[d]).length)delete S.log[d];}
@@ -421,7 +430,7 @@ function groupObj(){
 }
 /* o grupo Exercício conta como uma só unidade: basta um membro feito */
 function dayScore(d){
-  const u=S.habits.filter(h=>!h.group&&h.created<=d&&scheduled(d,h)).map(h=>isDone(d,h));
+  const u=S.habits.filter(h=>!h.group&&!h.optional&&h.created<=d&&scheduled(d,h)).map(h=>isDone(d,h));
   const G=groupObj();if(G&&G.created<=d&&scheduled(d,G))u.push(isDone(d,G));
   const done=u.filter(Boolean).length;
   return {total:u.length,done,perfect:u.length>0&&done===u.length};
@@ -510,8 +519,10 @@ function viewHabits(){
   if(fut)h+=`<div class="note plain">Este dia ainda não chegou. Os hábitos registam-se até hoje.</div>`;
   if(S.showWeight)h+=weightCard(d,fut);
   let seen=false;const items=[];
-  hs.forEach(x=>{if(x.group){if(!seen){seen=true;items.push(groupCard(G,d,fut));}}else if(scheduled(d,x))items.push(habitCard(x,d,fut));});
+  hs.forEach(x=>{if(x.group){if(!seen){seen=true;items.push(groupCard(G,d,fut));}}else if(scheduled(d,x)&&!x.optional)items.push(habitCard(x,d,fut));});
+  const opt=hs.filter(x=>!x.group&&x.optional&&scheduled(d,x));
   h+='<ul class="habits">'+items.join('')+'</ul>';
+  if(opt.length)h+=`<h2 class="restlbl">Opcionais</h2><ul class="habits">${opt.map(x=>habitCard(x,d,fut)).join('')}</ul>`;
   if(rest.length)h+=`<h2 class="restlbl">Fora do plano deste dia</h2><ul class="habits rest">${rest.map(x=>habitCard(x,d,fut)).join('')}</ul>`;
   return h;
 }
@@ -520,8 +531,8 @@ function habitCard(h,d,fut){
   if(hasItems(h)){
     const got=itemsDone(d,h);
     return `<li><div class="habit multi${ok?' done':got.size?' part':''}">
-      <button class="hhead" data-act="toggle" data-id="${h.id}" aria-pressed="${ok}" aria-label="${esc(h.name)}: marcar ${ok?'nenhum':'todos'}"${dis}><span class="box">${CHECK}</span><span class="hmain"><span class="hname">${esc(h.name)}</span>${last7(h,d)}</span><span class="badge">${got.size}/${h.items.length}</span></button>
-      <ul class="subs">${h.items.map(it=>{const on=got.has(it.id);return `<li><button class="subck${on?' on':''}" data-act="itoggle" data-id="${h.id}" data-item="${it.id}" aria-pressed="${on}"${dis}><span class="sbox">${CHECK}</span><span>${esc(it.name)}</span></button></li>`;}).join('')}</ul>
+      <button class="hhead" data-act="toggle" data-id="${h.id}" aria-pressed="${ok}" aria-label="${esc(h.name)}: marcar ${ok?'nenhum':'todos'}"${dis}><span class="box">${CHECK}</span><span class="hmain"><span class="hname">${esc(h.name)}</span>${last7(h,d)}</span><span class="badge">${reqItems(h).filter(i=>got.has(i.id)).length}/${reqItems(h).length}</span></button>
+      <ul class="subs">${h.items.map(it=>{const on=got.has(it.id);return `<li><button class="subck${on?' on':''}${it.optional?' opt':''}" data-act="itoggle" data-id="${h.id}" data-item="${it.id}" aria-pressed="${on}"${dis}><span class="sbox">${CHECK}</span><span>${esc(it.name)}${it.optional?'<small class="otag">opcional</small>':''}</span></button></li>`;}).join('')}</ul>
     </div></li>`;
   }
   if(h.type==='check')return `<li><button class="habit chk${ok?' done':''}" data-act="toggle" data-id="${h.id}" aria-pressed="${ok}"${dis}><span class="box">${CHECK}</span><span class="hmain"><span class="hname">${esc(h.name)}</span>${last7(h,d)}</span></button></li>`;
@@ -645,15 +656,15 @@ function viewStats(){
     let items='';
     if(hasItems(x)){
       items='<ul class="irates">'+x.items.map(it=>{let tt=0,ok2=0;days.forEach(d=>{if(d<x.created||!scheduled(d,x))return;const has=itemsDone(d,x).has(it.id);if(d===t&&!has)return;tt++;if(has)ok2++;});
-        const p=tt?ok2/tt:null;return `<li><span>${esc(it.name)}</span><i><b style="width:${p==null?0:(p*100).toFixed(0)}%"></b></i><em>${p==null?'–':Math.round(p*100)+'%'}</em></li>`;}).join('')+'</ul>';
+        const p=tt?ok2/tt:null;return `<li><span>${esc(it.name)}${it.optional?' <small class="otag">opc.</small>':''}</span><i><b style="width:${p==null?0:(p*100).toFixed(0)}%"></b></i><em>${it.optional?ok2+'×':p==null?'–':Math.round(p*100)+'%'}</em></li>`;}).join('')+'</ul>';
     }
-    return `<section class="card hstat"><div class="hstat-top"><h2>${esc(x.name)}</h2><b>${x.group?r.ok+'×':r.pct==null?'–':Math.round(r.pct*100)+'%'}</b></div>
-    <div class="facts"><span>sequência <b>${habitStreak(x)}</b></span><span>melhor <b>${habitBest(x)}</b></span>${x.group?`<span><b>${r.ok}</b> vezes</span>`:`<span><b>${r.ok}</b> de ${r.tot} dias</span>`}${extra}</div>${chart14(x)}${items}</section>`;
+    return `<section class="card hstat"><div class="hstat-top"><h2>${esc(x.name)}</h2><b>${x.group||x.optional?r.ok+'×':r.pct==null?'–':Math.round(r.pct*100)+'%'}</b></div>
+    <div class="facts"><span>sequência <b>${habitStreak(x)}</b></span><span>melhor <b>${habitBest(x)}</b></span>${x.group||x.optional?`<span><b>${r.ok}</b> vezes</span>`:`<span><b>${r.ok}</b> de ${r.tot} dias</span>`}${extra}</div>${chart14(x)}${items}</section>`;
   }).join('');
   return h;
 }
 
-function hdesc(h){return hdesc0(h)+(h.group?' · exercício':'')+(Array.isArray(h.days)?' · '+[1,2,3,4,5,6,0].filter(n=>h.days.includes(n)).map(n=>DOW[n].slice(0,3)).join(', '):'');}
+function hdesc(h){return hdesc0(h)+(h.group?' · exercício':'')+(h.optional?' · opcional':'')+(Array.isArray(h.days)?' · '+[1,2,3,4,5,6,0].filter(n=>h.days.includes(n)).map(n=>DOW[n].slice(0,3)).join(', '):'');}
 function hdesc0(h){return hasItems(h)?`lista de ${h.items.length}`:h.type==='check'?'sim / não':`meta ${fmt(h.target)} ${h.unit} · +${fmt(h.step)}`;}
 function viewSettings(){
   return `<section class="card"><h2>Hábitos</h2><ul class="list">${S.habits.map(h=>`<li><div><b>${esc(h.name)}</b><span>${esc(hdesc(h))}</span></div><button class="btn ghost sm" data-act="hedit" data-id="${h.id}">Editar</button></li>`).join('')}</ul><button class="btn ghost add" data-act="hnew">+ Novo hábito</button></section>
@@ -674,7 +685,7 @@ function closeSheet(){$('#scrim').hidden=true;$('#sheet').innerHTML='';if(lastFo
 let toastT;
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200);}
 
-const itemRow=it=>`<li><input type="text" data-iid="${esc(it.id)}" value="${esc(it.name)}" placeholder="Ex.: Creatina" aria-label="Item" maxlength="40"><button type="button" class="icon" data-act="idel" aria-label="Apagar item">${TRASH}</button></li>`;
+const itemRow=it=>`<li><input type="text" data-iid="${esc(it.id)}" value="${esc(it.name)}" placeholder="Ex.: Creatina" aria-label="Item" maxlength="40"><button type="button" class="optbtn" data-act="iopt" aria-pressed="${!!it.optional}">Opcional</button><button type="button" class="icon" data-act="idel" aria-label="Apagar item">${TRASH}</button></li>`;
 function habitSheet(h){
   const isNew=!h;h=h||{name:'',type:'check',target:1,unit:'',step:1};
   openSheet(`<h2>${isNew?'Novo hábito':'Editar hábito'}</h2>
@@ -692,6 +703,7 @@ function habitSheet(h){
   </div>
   <div class="fld">Dias em que conta<div class="wdays" id="hf-days">${[1,2,3,4,5,6,0].map(n=>`<button type="button" data-act="hday" data-v="${n}" aria-pressed="${!Array.isArray(h.days)||h.days.includes(n)}" aria-label="${DOW[n]}">${DOWI[n]}</button>`).join('')}</div></div>
   <label class="chk" id="hf-grow"${h.type==='check'?'':' hidden'}><input type="checkbox" id="hf-group"${h.group?' checked':''}><span>Conta para “Exercício”: basta um destes hábitos por dia para o dia ficar completo</span></label>
+  <label class="chk"><input type="checkbox" id="hf-opt"${h.optional?' checked':''}><span>Opcional: fica registado, mas não conta para os hábitos cumpridos nem para o dia completo</span></label>
   <p class="err" id="hf-err" hidden></p>
   <div class="row">${isNew?'':`<button class="btn warn" data-act="hdel" data-id="${h.id}" data-confirm>Apagar</button>`}<span class="sp"></span><button class="btn ghost" data-act="close">Cancelar</button><button class="btn" data-act="hsave" data-id="${isNew?'':h.id}">Guardar</button></div>`,isNew?'#hf-name':null);
 }
@@ -714,12 +726,13 @@ function act(el){
     case 'goday':ui.day=el.dataset.day;ui.tab='habitos';render();window.scrollTo(0,0);break;
     case 'dismiss':S.seenIntro=true;save();render();break;
     case 'toggle':
-      if(hasItems(h))setVal(ui.day,h,isDone(ui.day,h)?false:Object.fromEntries(h.items.map(i=>[i.id,true])));
+      if(hasItems(h))setVal(ui.day,h,isDone(ui.day,h)?false:Object.fromEntries((reqItems(h).length?reqItems(h):h.items).map(i=>[i.id,true])));
       else setVal(ui.day,h,!isDone(ui.day,h));
       render();break;
     case 'itoggle':{const got=itemsDone(ui.day,h),iid=el.dataset.item;got.has(iid)?got.delete(iid):got.add(iid);
       setVal(ui.day,h,got.size?Object.fromEntries([...got].map(k=>[k,true])):false);render();break;}
     case 'iadd':{$('#hf-items').insertAdjacentHTML('beforeend',itemRow({id:'i'+uid(),name:''}));const ins=$('#hf-items').querySelectorAll('input');ins[ins.length-1].focus();break;}
+    case 'iopt':el.setAttribute('aria-pressed',el.getAttribute('aria-pressed')!=='true');break;
     case 'idel':el.closest('li').remove();break;
     case 'inc':case 'dec':{const n=Number(val(ui.day,h))||0;setVal(ui.day,h,Math.max(0,round2(n+(a==='inc'?h.step:-h.step))));render();break;}
     case 'setval':{const n=Number(val(ui.day,h))||0;
@@ -757,6 +770,7 @@ function act(el){
       const num=s=>parseFloat(String(s).replace(',','.'));
       if(!name){err.textContent='Dá um nome ao hábito.';err.hidden=false;return;}
       const o={name,type};
+      if($('#hf-opt').checked)o.optional=true;
       if(type==='check'&&$('#hf-group').checked){o.group='ex';S.groups=S.groups||{};S.groups.ex=S.groups.ex||{name:'Exercício'};}
       const dsel=[...document.querySelectorAll('#hf-days [aria-pressed="true"]')].map(b=>+b.dataset.v);
       if(!dsel.length){err.textContent='Escolhe pelo menos um dia da semana.';err.hidden=false;return;}
@@ -767,10 +781,10 @@ function act(el){
         if(!(o.step>0))o.step=o.target>=100?Math.round(o.target/8):1;
       }
       if(type==='check'){
-        const its=[...document.querySelectorAll('#hf-items input')].map(i=>({id:i.dataset.iid,name:i.value.trim()})).filter(i=>i.name);
+        const its=[...document.querySelectorAll('#hf-items input')].map(i=>{const op=i.closest('li').querySelector('.optbtn').getAttribute('aria-pressed')==='true';return {id:i.dataset.iid,name:i.value.trim(),...(op?{optional:true}:{})};}).filter(i=>i.name);
         if(its.length)o.items=its;
       }
-      if(h){Object.assign(h,o);if(!o.days)delete h.days;if(!o.group)delete h.group;if(type==='check'){delete h.target;delete h.step;delete h.unit;if(!o.items)delete h.items;}else delete h.items;}
+      if(h){Object.assign(h,o);if(!o.days)delete h.days;if(!o.group)delete h.group;if(!o.optional)delete h.optional;if(type==='check'){delete h.target;delete h.step;delete h.unit;if(!o.items)delete h.items;}else delete h.items;}
       else S.habits.push(Object.assign({id:'h-'+uid(),created:todayKey()},o));
       save();closeSheet();render();toast('Guardado');break;}
     case 'hdel':S.habits=S.habits.filter(x=>x.id!==id);save();closeSheet();render();toast('Hábito apagado');break;
