@@ -343,7 +343,7 @@ const NEW_V2=()=>[{id:'h-gin',name:'Ginásio',type:'check',group:'ex'},{id:'h-co
 const NEW_V3=()=>[{id:'h-doces',name:'Dia sem doces',type:'check'},{id:'h-llm',name:'Avançar no LLM Course',type:'check'}];
 const NEW_V4=()=>[{id:'h-oculos',name:'Óculos bloqueadores de luz azul',type:'check'}];
 const myTemplate=()=>([['10:00','Pequeno-almoço'],['13:00','Almoço'],['16:00','Lanche'],['17:00','Ginásio'],['19:00','Jantar',[1,3,5]],['20:00','Jantar',[0,2,4,6]],['21:30','Treino de Futsal',[1,3]],['21:30','Jogo de Futsal',[5]]].map(([time,title,days])=>days?{id:uid(),time,title,days}:{id:uid(),time,title})).sort((a,b)=>a.time.localeCompare(b.time));
-const suppItems=()=>SUPPS.map((n,i)=>({id:'s'+i,name:n,...(n==='Colagénio'?{optional:true}:{})}));
+const suppItems=()=>[{id:'s0',name:'Creatina'},{id:'s1',name:'Ómega 3'},{id:'s2',name:'Vitamina D'},{id:'s4',name:'Magnésio'},{id:'s3',name:'Colagénio',optional:true}];
 function defaults(){
   const t=todayKey();
   return {v:1,seenIntro:false,
@@ -354,7 +354,7 @@ function defaults(){
       ...NEW_V2().map(x=>({...x,created:t})),
       ...NEW_V3().map(x=>({...x,created:t})),
       ...NEW_V4().map(x=>({...x,created:t}))
-    ],addedV2:true,addedV3:true,addedV4:true,groupV5:true,optV6:true,groups:{ex:{name:'Exercício'}},
+    ],addedV2:true,addedV3:true,addedV4:true,groupV5:true,optV6:true,orderV7:true,groups:{ex:{name:'Exercício'}},
     log:{},weight:{},showWeight:true,template:myTemplate(),days:{},tplV3:true,tplV4:true};
 }
 function valid(s){return s&&typeof s==='object'&&Array.isArray(s.habits)&&Array.isArray(s.template)&&s.log&&typeof s.log==='object'&&s.days&&typeof s.days==='object';}
@@ -389,6 +389,7 @@ function load(){
     s.groupV5=true;
   }
   if(!s.optV6){const sp=s.habits.find(h=>h.id==='h-sup');if(sp&&Array.isArray(sp.items)){const c=sp.items.find(i=>i.name==='Colagénio');if(c)c.optional=true;}s.optV6=true;}
+  if(!s.orderV7){const sp=s.habits.find(h=>h.id==='h-sup');if(sp&&Array.isArray(sp.items)){const k=sp.items.findIndex(i=>i.name==='Colagénio');if(k>=0)sp.items.push(sp.items.splice(k,1)[0]);}s.orderV7=true;}
   return s;
 }
 let S=load(), storageOk=true;
